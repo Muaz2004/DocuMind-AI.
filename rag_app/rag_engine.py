@@ -1,119 +1,121 @@
 import os
-from typing import List
-
-from PyPDF2 import PdfReader
+import pickle
+import PyPDF2
+import numpy as np
+import faiss
 from sentence_transformers import SentenceTransformer
-import chromadb
-from chromadb.config import Settings
 
 
-# -----------------------------
-# Configuration
-# -----------------------------
+# CONFIG
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-VECTOR_STORE_PATH = os.path.join(BASE_DIR, "vector_store")
+PDF_PATH = "test_docs/sample.pdf"
 
-EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
-CHUNK_SIZE = 500        # characters
-CHUNK_OVERLAP = 100     # characters
+VECTOR_DIR = "vector_db"
+INDEX_PATH = os.path.join(VECTOR_DIR, "faiss.index")
+CHUNKS_PATH = os.path.join(VECTOR_DIR, "chunks.pkl")
+
+CHUNK_SIZE = 500
+OVERLAP = 100
 TOP_K = 3
 
 
-# -----------------------------
-# Load embedding model (once)
-# -----------------------------
 
-embedding_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
+# LOAD PDF
 
-
-# -----------------------------
-# Vector DB (persistent)
-# -----------------------------
-
-chroma_client = chromadb.Client(
-    Settings(
-        persist_directory=VECTOR_STORE_PATH,
-        anonymized_telemetry=False
-    )
-)
-
-collection = chroma_client.get_or_create_collection(
-    name="rag_documents"
-)
-
-
-# -----------------------------
-# 1. Load PDF
-# -----------------------------
-
-def load_pdf(pdf_path: str) -> str:
-    reader = PdfReader(pdf_path)
+def load_pdf_text(pdf_path):
     text = ""
-
-    for page in reader.pages:
-        page_text = page.extract_text()
-        if page_text:
-            text += page_text + "\n"
-
+    with open(pdf_path, "rb") as file:
+        reader = PyPDF2.PdfReader(file)
+        for page in reader.pages:
+            extracted = page.extract_text()
+            if extracted:
+                text += extracted + "\n"
     return text
 
 
-# -----------------------------
-# 2. Chunk text
-# -----------------------------
 
-def chunk_text(text: str) -> List[str]:
+# CHUNK TEXT
+def chunk_text(text, chunk_size=500, overlap=100):
     chunks = []
     start = 0
 
     while start < len(text):
-        end = start + CHUNK_SIZE
-        chunk = text[start:end]
-        chunks.append(chunk)
-        start = end - CHUNK_OVERLAP
+        end = start + chunk_size
+        chunks.append(text[start:end])
+        start = end - overlap
 
     return chunks
 
 
-# -----------------------------
-# 3. Create embeddings
-# -----------------------------
 
-def embed_texts(texts: List[str]) -> List[List[float]]:
-    return embedding_model.encode(texts).tolist()
+# EMBEDDING MODEL
+def load_embedding_model():
+    return SentenceTransformer("all-MiniLM-L6-v2")
 
 
-# -----------------------------
-# 4. Index document (PDF → vectors)
-# -----------------------------
 
-def index_pdf(pdf_path: str):
-    text = load_pdf(pdf_path)
+# INDEX DOCUMENT (PERSISTENT)
+
+def index_document(pdf_path):
+    print("Loading PDF...")
+    text = load_pdf_text(pdf_path)
+
+    print("Chunking text...")
     chunks = chunk_text(text)
-    embeddings = embed_texts(chunks)
+    print(f"Total chunks: {len(chunks)}")
 
-    ids = [f"chunk_{i}" for i in range(len(chunks))]
+    model = load_embedding_model()
+    print("Creating embeddings...")
+    embeddings = model.encode(chunks).astype("float32")
 
-    collection.add(
-        documents=chunks,
-        embeddings=embeddings,
-        ids=ids
-    )
+    dim = embeddings.shape[1]
+    index = faiss.IndexFlatL2(dim)
+    index.add(embeddings)
 
-    chroma_client.persist()
+    os.makedirs(VECTOR_DIR, exist_ok=True)
+
+    faiss.write_index(index, INDEX_PATH)
+    with open(CHUNKS_PATH, "wb") as f:
+        pickle.dump(chunks, f)
+
+    print("FAISS index and chunks saved to disk.")
 
 
-# -----------------------------
-# 5. Retrieve relevant chunks
-# -----------------------------
+# LOAD INDEX
 
-def retrieve(query: str, top_k: int = TOP_K) -> List[str]:
-    query_embedding = embed_texts([query])[0]
+def load_index():
+    index = faiss.read_index(INDEX_PATH)
+    with open(CHUNKS_PATH, "rb") as f:
+        chunks = pickle.load(f)
+    return index, chunks
 
-    results = collection.query(
-        query_embeddings=[query_embedding],
-        n_results=top_k
-    )
 
-    return results["documents"][0]
+
+# RETRIEVAL
+
+def retrieve(query, top_k=3):
+    model = load_embedding_model()
+    index, chunks = load_index()
+
+    query_embedding = model.encode([query]).astype("float32")
+    distances, indices = index.search(query_embedding, top_k)
+
+    return [chunks[i] for i in indices[0]]
+
+
+
+# MAIN (TEST)
+
+if __name__ == "__main__":
+
+    if not os.path.exists(INDEX_PATH):
+        index_document(PDF_PATH)
+
+    print("\n--- QUERY TEST ---\n")
+
+    question = "What does the company do?"
+    results = retrieve(question, TOP_K)
+
+    for i, chunk in enumerate(results, 1):
+        print(f"\n--- Result {i} ---")
+        print(chunk)
