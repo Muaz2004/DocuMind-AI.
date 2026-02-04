@@ -4,17 +4,30 @@ import ResultList from "../components/ResultList";
 
 function QueryPage() {
   const [question, setQuestion] = useState("");
-  const [results, setResults] = useState([]);
+  const [answer, setAnswer] = useState("");
+  const [chunks, setChunks] = useState([]);
+  const [loading, setLoading] = useState(false);
 
   const handleAsk = async () => {
     if (!question) return;
 
-    const res = await queryRAG(question);
-    setResults(res.results || []);
+    setLoading(true);
+    try {
+      const res = await queryRAG(question);
+      console.log("Query response:", res);
+
+      setAnswer(res.answer || "No answer found");
+      setChunks(res.chunks || []);
+    } catch (err) {
+      console.error("Query error:", err);
+      setAnswer("Error fetching answer");
+      setChunks([]);
+    }
+    setLoading(false);
   };
 
   return (
-    <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 15 }}>
+    <div style={{ padding: 20, maxWidth: 700, margin: "auto", display: "flex", flexDirection: "column", gap: 15 }}>
       <h2>Ask a Question</h2>
 
       <input
@@ -27,6 +40,7 @@ function QueryPage() {
 
       <button
         onClick={handleAsk}
+        disabled={loading}
         style={{
           padding: "10px 15px",
           backgroundColor: "#4CAF50",
@@ -37,10 +51,22 @@ function QueryPage() {
           width: 100
         }}
       >
-        Ask
+        {loading ? "Fetching..." : "Ask"}
       </button>
 
-      <ResultList results={results} />
+      {answer && (
+        <div style={{ marginTop: 20 }}>
+          <h3>Answer:</h3>
+          <p>{answer}</p>
+        </div>
+      )}
+
+      {chunks.length > 0 && (
+        <div style={{ marginTop: 20 }}>
+          <h4>Source Chunks:</h4>
+          <ResultList results={chunks} />
+        </div>
+      )}
     </div>
   );
 }

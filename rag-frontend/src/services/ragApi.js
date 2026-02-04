@@ -14,7 +14,7 @@ export const uploadPDF = async (file) => {
     console.log("Raw fetch response:", res); 
     const data = await res.json();
     console.log("Parsed JSON:", data); 
-    return { message: data.status || data.error };
+    return { message: data.message || data.error }; 
   } catch (err) {
     console.error("Upload fetch error:", err); 
     return { message: "Upload failed" };
@@ -32,9 +32,9 @@ export const queryRAG = async (question) => {
     console.log("Query raw response:", res); 
     const data = await res.json();
     console.log("Query parsed JSON:", data); 
-    return data;
+    return data; // returns { answer, chunks, question }
   } catch (err) {
     console.error("Query fetch error:", err);
-    return { results: [], error: "Query failed" };
+    return { answer: "Query failed", chunks: [], error: "Query failed" };
   }
 };

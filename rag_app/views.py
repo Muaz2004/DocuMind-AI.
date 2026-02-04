@@ -5,16 +5,14 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.core.files.storage import FileSystemStorage
 
+from rag_app.services.answer_generator import generate_answer
+
 from .services.rag_engine import query_rag, index_uploaded_pdf
 
 # Directory where uploaded PDFs will be saved
 UPLOAD_DIR = os.path.join("rag_app", "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)  # make sure folder exists
 
-
-# -------------------------
-# QUERY VIEW
-# -------------------------
 @csrf_exempt
 def query_view(request):
     if request.method != "POST":
@@ -27,11 +25,16 @@ def query_view(request):
         if not question:
             return JsonResponse({"error": "Question is required"}, status=400)
 
-        results = query_rag(question)
+        # Get raw chunks from RAG engine
+        chunks = query_rag(question)
+
+        # Generate a clean, readable answer
+        answer = generate_answer(chunks)
 
         return JsonResponse({
             "question": question,
-            "results": results
+            "answer": answer,
+            "chunks": chunks  
         })
 
     except Exception as e:
