@@ -4,19 +4,19 @@ export const uploadPDF = async (file) => {
   try {
     const formData = new FormData();
     formData.append("pdf", file);
-    console.log("FormData prepared:", formData.get("pdf")); // <-- debug
+    console.log("FormData prepared:", formData.get("pdf")); 
 
     const res = await fetch(`${API_BASE}/upload/`, {
       method: "POST",
       body: formData,
     });
 
-    console.log("Raw fetch response:", res); // <-- debug
+    console.log("Raw fetch response:", res); 
     const data = await res.json();
-    console.log("Parsed JSON:", data); // <-- debug
+    console.log("Parsed JSON:", data); 
     return { message: data.status || data.error };
   } catch (err) {
-    console.error("Upload fetch error:", err); // <-- debug
+    console.error("Upload fetch error:", err); 
     return { message: "Upload failed" };
   }
 };
@@ -29,9 +29,9 @@ export const queryRAG = async (question) => {
       body: JSON.stringify({ question }),
     });
 
-    console.log("Query raw response:", res); // <-- debug
+    console.log("Query raw response:", res); 
     const data = await res.json();
-    console.log("Query parsed JSON:", data); // <-- debug
+    console.log("Query parsed JSON:", data); 
     return data;
   } catch (err) {
     console.error("Query fetch error:", err);

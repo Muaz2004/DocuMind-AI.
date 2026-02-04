@@ -11,35 +11,43 @@ function UploadPage() {
       return;
     }
 
-    console.log("Selected file:", file); 
-
     setStatus("Uploading...");
     try {
       const res = await uploadPDF(file);
-      console.log("Upload response:", res); 
       setStatus(res.message || "Done");
     } catch (err) {
-      console.error("Upload error:", err); 
+      console.error(err);
       setStatus("Upload failed");
     }
   };
 
   return (
-    <div style={{ padding: 20 }}>
+    <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 15 }}>
       <h2>Upload Document</h2>
 
       <input
         type="file"
         accept="application/pdf"
-        onChange={(e) => {
-          console.log("File selected:", e.target.files[0]); 
-          setFile(e.target.files[0]);
-        }}
+        onChange={(e) => setFile(e.target.files[0])}
+        style={{ padding: 8 }}
       />
 
-      <button onClick={handleUpload}>Upload & Index</button>
+      <button
+        onClick={handleUpload}
+        style={{
+          padding: "10px 15px",
+          backgroundColor: "#4CAF50",
+          color: "white",
+          border: "none",
+          cursor: "pointer",
+          borderRadius: 5,
+          width: 150
+        }}
+      >
+        Upload & Index
+      </button>
 
-      <p>{status}</p>
+      {status && <p style={{ fontWeight: "bold" }}>{status}</p>}
     </div>
   );
 }
