@@ -1,85 +1,51 @@
+# views.py
 import os
 import json
-import traceback
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
-from django.core.files.storage import FileSystemStorage
+from django.core.files.storage import default_storage
+from rag_app.services.rag_engine import async_index, retrieve_top_chunks, organize_answer
 
-from rag_app.services.answer_generator import generate_answer
+UPLOAD_DIR = "uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-from .services.rag_engine import query_rag, index_uploaded_pdf
-
-# Directory where uploaded PDFs will be saved
-UPLOAD_DIR = os.path.join("rag_app", "uploads")
-os.makedirs(UPLOAD_DIR, exist_ok=True)  # make sure folder exists
-
-@csrf_exempt
-def query_view(request):
-    if request.method != "POST":
-        return JsonResponse({"error": "POST request required"}, status=400)
-
-    try:
-        data = json.loads(request.body)
-        question = data.get("question")
-
-        if not question:
-            return JsonResponse({"error": "Question is required"}, status=400)
-
-        # Get raw chunks from RAG engine
-        chunks = query_rag(question)
-
-        # Generate a clean, readable answer
-        answer = generate_answer(chunks)
-
-        return JsonResponse({
-            "question": question,
-            "answer": answer,
-            "chunks": chunks  
-        })
-
-    except Exception as e:
-        # Log full traceback for debugging
-        print("Exception in query_view:")
-        traceback.print_exc()
-        return JsonResponse({"error": str(e)}, status=500)
-
-
-# -------------------------
-# UPLOAD PDF VIEW
-# -------------------------
+# ---------------- UPLOAD PDF ----------------
 @csrf_exempt
 def upload_pdf(request):
-    try:
-        print("Request method:", request.method)
-        print("FILES:", request.FILES)
-        print("POST:", request.POST)
-
-        if request.method != "POST":
-            return JsonResponse({"error": "POST required"}, status=400)
-
-        # React uploads the file as "pdf" key in FormData
-        if "pdf" not in request.FILES:
-            return JsonResponse({"error": "No file uploaded"}, status=400)
-
+    if request.method == "POST" and request.FILES.get("pdf"):
         pdf_file = request.FILES["pdf"]
-        print("Received file:", pdf_file.name, pdf_file.size)
+        saved_path = default_storage.save(f"uploads/{pdf_file.name}", pdf_file)
 
-        # Save the uploaded file
-        fs = FileSystemStorage(location=UPLOAD_DIR)
-        filename = fs.save(pdf_file.name, pdf_file)
-        file_path = os.path.join(UPLOAD_DIR, filename)
-        print("File saved at:", file_path)
+        # Start indexing in background
+        async_index(saved_path)
 
-        # Index the uploaded PDF (your RAG engine)
-        index_uploaded_pdf(file_path)
+        return JsonResponse({"status": "PDF uploaded. Indexing started (append mode)."})
+    return JsonResponse({"error": "No PDF uploaded"}, status=400)
 
-        return JsonResponse({
-            "message": "File uploaded and indexed successfully",
-            "file": filename
-        })
+# ---------------- QUERY ----------------
+@csrf_exempt
+def query_view(request):
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body)
+            question = data.get("question", "").strip()
+            if not question:
+                return JsonResponse({"error": "Question required"}, status=400)
 
-    except Exception as e:
-        # Catch all exceptions and log for debugging
-        print("Exception in upload_pdf:")
-        traceback.print_exc()
-        return JsonResponse({"error": "Server error: " + str(e)}, status=500)
+            # Retrieve top chunks
+            try:
+                top_chunks = retrieve_top_chunks(question)
+            except Exception as e:
+                return JsonResponse({"error": "Index not ready. Upload PDF first.", "details": str(e)}, status=400)
+
+            answer = organize_answer(top_chunks)
+
+            return JsonResponse({
+                "question": question,
+                "answer": answer,
+                "sources": top_chunks
+            })
+        except Exception as e:
+            return JsonResponse({"error": "Invalid request", "details": str(e)}, status=400)
+
+    return JsonResponse({"error": "Invalid request"}, status=400)

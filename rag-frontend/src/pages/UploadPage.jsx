@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { uploadPDF } from "../services/ragApi";
 
 export default function UploadSection() {
   const [file, setFile] = useState(null);
@@ -6,13 +7,13 @@ export default function UploadSection() {
 
   const handleUpload = async () => {
     if (!file) return setStatus("Select a file");
-    setStatus("Indexing...");
+    setStatus("Uploading...");
     try {
-      // Replace this with your actual uploadPDF API
-      await new Promise((res) => setTimeout(res, 1000));
-      setStatus("Success ✓");
+      const res = await uploadPDF(file);
+      console.log("Upload result:", res);
+      setStatus(res.status || res.message || "Upload complete");
     } catch {
-      setStatus("Error");
+      setStatus("Error uploading file");
     }
   };
 
@@ -21,7 +22,7 @@ export default function UploadSection() {
       <h3>Upload PDF</h3>
       <input type="file" onChange={(e) => setFile(e.target.files[0])} />
       <button onClick={handleUpload}>
-        {status === "Indexing..." ? status : "Upload"}
+        {status === "Uploading..." ? status : "Upload"}
       </button>
       {status && <p className="upload-status">{status}</p>}
     </div>

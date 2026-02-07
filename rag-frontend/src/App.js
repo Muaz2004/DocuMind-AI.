@@ -80,7 +80,7 @@ function App() {
 
         {/* FOOTER */}
         <footer className="page-footer">
-          <p>© 2026 Internal Intelligence Tool • Proprietary Development</p>
+          <p>© 2026 Muaz Indris • Proprietary Development</p>
         </footer>
       </div>
     </div>

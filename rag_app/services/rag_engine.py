@@ -1,81 +1,102 @@
+# rag_engine.py
 import os
 import pickle
+from threading import Thread
 import PyPDF2
-import numpy as np
 import faiss
 from sentence_transformers import SentenceTransformer
+from pathlib import Path
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-
-VECTOR_DIR = os.path.join(BASE_DIR, "vector_db")
-INDEX_PATH = os.path.join(VECTOR_DIR, "faiss.index")
-CHUNKS_PATH = os.path.join(VECTOR_DIR, "chunks.pkl")
-
+# ---------------- CONFIG ----------------
+BASE_DIR = Path(__file__).resolve().parent.parent  # Absolute project root
+VECTOR_DIR = BASE_DIR / "vector_db"
+INDEX_PATH = VECTOR_DIR / "faiss.index"
+CHUNKS_PATH = VECTOR_DIR / "chunks.pkl"
 CHUNK_SIZE = 500
 OVERLAP = 100
+TOP_K = 3
 
+# ---------------- GLOBAL MODEL ----------------
+embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
 
-
-# INTERNAL HELPERS
-
-def _load_pdf_text(pdf_path):
+# ---------------- PDF & CHUNK FUNCTIONS ----------------
+def load_pdf_text(pdf_path):
     text = ""
-    with open(pdf_path, "rb") as file:
-        reader = PyPDF2.PdfReader(file)
+    with open(pdf_path, "rb") as f:
+        reader = PyPDF2.PdfReader(f)
         for page in reader.pages:
             extracted = page.extract_text()
             if extracted:
                 text += extracted + "\n"
     return text
 
-
-def _chunk_text(text):
+def chunk_text(text, chunk_size=CHUNK_SIZE, overlap=OVERLAP):
     chunks = []
     start = 0
-
     while start < len(text):
-        end = start + CHUNK_SIZE
+        end = start + chunk_size
         chunks.append(text[start:end])
-        start = end - OVERLAP
-
+        start = end - overlap
     return chunks
 
-
-def _load_model():
-    return SentenceTransformer("all-MiniLM-L6-v2")
-
-
-# PUBLIC API
+# ---------------- INDEXING ----------------
 def index_document(pdf_path):
-    text = _load_pdf_text(pdf_path)
-    chunks = _chunk_text(text)
+    print(f"📄 Indexing PDF: {pdf_path}")
 
-    model = _load_model()
-    embeddings = model.encode(chunks).astype("float32")
+    # Load PDF
+    text = load_pdf_text(pdf_path)
+    new_chunks = chunk_text(text)
+    print(f"🧩 Chunks created: {len(new_chunks)}")
 
-    dim = embeddings.shape[1]
-    index = faiss.IndexFlatL2(dim)
-    index.add(embeddings)
+    # Create embeddings
+    new_embeddings = embedding_model.encode(new_chunks, batch_size=32).astype("float32")
 
-    os.makedirs(VECTOR_DIR, exist_ok=True)
+    # Ensure vector directory exists
+    VECTOR_DIR.mkdir(parents=True, exist_ok=True)
+    print(f"📁 Vector DB folder: {VECTOR_DIR.resolve()}")
 
-    faiss.write_index(index, INDEX_PATH)
+    # Load or create index
+    if INDEX_PATH.exists() and CHUNKS_PATH.exists():
+        print("➕ Existing index found. Appending data...")
+        index = faiss.read_index(str(INDEX_PATH))
+        with open(CHUNKS_PATH, "rb") as f:
+            all_chunks = pickle.load(f)
+    else:
+        print("🆕 No index found. Creating new one...")
+        dim = new_embeddings.shape[1]
+        index = faiss.IndexFlatL2(dim)
+        all_chunks = []
+
+    # Append new embeddings and chunks
+    index.add(new_embeddings)
+    all_chunks.extend(new_chunks)
+
+    # Save index and chunks
+    faiss.write_index(index, str(INDEX_PATH))
     with open(CHUNKS_PATH, "wb") as f:
-        pickle.dump(chunks, f)
+        pickle.dump(all_chunks, f)
 
+    print(f"✅ Index saved. Total chunks: {len(all_chunks)}")
 
-def query_rag(question, top_k=3):
-    model = _load_model()
+def async_index(pdf_path):
+    Thread(target=index_document, args=(pdf_path,)).start()
 
-    index = faiss.read_index(INDEX_PATH)
+# ---------------- RETRIEVAL ----------------
+def load_index():
+    if not INDEX_PATH.exists() or not CHUNKS_PATH.exists():
+        raise Exception("Index not ready. Upload PDF first.")
+    index = faiss.read_index(str(INDEX_PATH))
     with open(CHUNKS_PATH, "rb") as f:
         chunks = pickle.load(f)
+    return index, chunks
 
-    query_embedding = model.encode([question]).astype("float32")
-    _, indices = index.search(query_embedding, top_k)
+def retrieve_top_chunks(query, top_k=TOP_K):
+    index, chunks = load_index()
+    query_embedding = embedding_model.encode([query]).astype("float32")
+    distances, indices = index.search(query_embedding, top_k)
+    results = [chunks[i] for i in indices[0] if i < len(chunks)]
+    return results
 
-    return [chunks[i] for i in indices[0]]
-
-
-def index_uploaded_pdf(pdf_path):
-    index_document(pdf_path)
+# ---------------- ANSWER ORGANIZER ----------------
+def organize_answer(chunks):
+    return "\n\n".join(chunks) if chunks else "No relevant content found."

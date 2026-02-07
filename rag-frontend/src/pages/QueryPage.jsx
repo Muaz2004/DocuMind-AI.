@@ -9,7 +9,6 @@ export default function QuerySection() {
   const handleAsk = async () => {
     if (!question.trim()) return;
 
-    // Add user question to chat
     const newChat = [...chatHistory, { type: "user", text: question }];
     setChatHistory(newChat);
     setQuestion("");
@@ -17,7 +16,7 @@ export default function QuerySection() {
 
     try {
       const res = await queryRAG(question);
-      // Add AI answer
+      // add AI response
       setChatHistory([...newChat, { type: "ai", text: res.answer }]);
     } catch {
       setChatHistory([...newChat, { type: "ai", text: "Failed to fetch response." }]);
@@ -29,11 +28,8 @@ export default function QuerySection() {
   return (
     <div className="chat-container">
       <div className="chat-history">
-        {chatHistory.map((msg, index) => (
-          <div
-            key={index}
-            className={`chat-bubble ${msg.type === "user" ? "user" : "ai"}`}
-          >
+        {chatHistory.map((msg, i) => (
+          <div key={i} className={`chat-bubble ${msg.type}`}>
             {msg.text}
           </div>
         ))}
