@@ -7,8 +7,7 @@ import faiss
 from sentence_transformers import SentenceTransformer
 from pathlib import Path
 
-# ---------------- CONFIG ----------------
-BASE_DIR = Path(__file__).resolve().parent.parent  # Absolute project root
+BASE_DIR = Path(__file__).resolve().parent.parent 
 VECTOR_DIR = BASE_DIR / "vector_db"
 INDEX_PATH = VECTOR_DIR / "faiss.index"
 CHUNKS_PATH = VECTOR_DIR / "chunks.pkl"
@@ -16,10 +15,9 @@ CHUNK_SIZE = 500
 OVERLAP = 100
 TOP_K = 3
 
-# ---------------- GLOBAL MODEL ----------------
 embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
 
-# ---------------- PDF & CHUNK FUNCTIONS ----------------
+
 def load_pdf_text(pdf_path):
     text = ""
     with open(pdf_path, "rb") as f:
@@ -39,7 +37,7 @@ def chunk_text(text, chunk_size=CHUNK_SIZE, overlap=OVERLAP):
         start = end - overlap
     return chunks
 
-# ---------------- INDEXING ----------------
+
 def index_document(pdf_path):
     print(f"📄 Indexing PDF: {pdf_path}")
 
@@ -81,7 +79,7 @@ def index_document(pdf_path):
 def async_index(pdf_path):
     Thread(target=index_document, args=(pdf_path,)).start()
 
-# ---------------- RETRIEVAL ----------------
+# RETRIEVAL 
 def load_index():
     if not INDEX_PATH.exists() or not CHUNKS_PATH.exists():
         raise Exception("Index not ready. Upload PDF first.")
@@ -97,6 +95,6 @@ def retrieve_top_chunks(query, top_k=TOP_K):
     results = [chunks[i] for i in indices[0] if i < len(chunks)]
     return results
 
-# ---------------- ANSWER ORGANIZER ----------------
+#  ANSWER ORGANIZER 
 def organize_answer(chunks):
     return "\n\n".join(chunks) if chunks else "No relevant content found."
