@@ -1,0 +1,25 @@
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+
+# Django migration cache
+*/migrations/__pycache__/
+*.sqlite3
+*.log
+
+# FAISS / vector DB files
+vector_db/*.pkl
+vector_db/*.index
+
+# Ignore uploaded PDFs if you want them local only
+media/uploads/*
+
+# IDE specific files
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# OS files
+.DS_Store
+Thumbs.db
